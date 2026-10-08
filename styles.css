@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Industrial Motor Simulator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Automation / Control Panel</p>
+          <h1>Motor Starter Simulator</h1>
+        </div>
+        <div class="status-chip" id="globalStatus">STOPPED</div>
+      </header>
+
+      <main class="main-layout">
+        <section class="panel config-panel">
+          <h2>Motor configuration</h2>
+
+          <div class="field-grid">
+            <label>
+              Power (HP)
+              <input id="powerInput" type="range" min="2" max="50" step="1" value="15" />
+              <div class="inline-value"><span id="powerValue">15</span> HP</div>
+            </label>
+
+            <label>
+              Voltage (V)
+              <select id="voltageSelect">
+                <option value="220">220 V</option>
+                <option value="380" selected>380 V</option>
+                <option value="440">440 V</option>
+              </select>
+            </label>
+
+            <label>
+              Load (%)
+              <input id="loadInput" type="range" min="0" max="100" step="1" value="55" />
+              <div class="inline-value"><span id="loadValue">55</span>%</div>
+            </label>
+
+            <label>
+              Start mode
+              <select id="modeSelect">
+                <option value="DOL">DOL</option>
+                <option value="SOFT">Soft Starter</option>
+                <option value="REVERSING">Reversing</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="startButton" class="primary">Start</button>
+            <button id="stopButton" class="secondary">Stop</button>
+          </div>
+
+          <div class="button-row small-gap">
+            <button id="faultCurrentButton" class="warning">Overcurrent fault</button>
+            <button id="faultPhaseButton" class="warning">Phase loss</button>
+            <button id="faultResetButton" class="muted">Reset</button>
+          </div>
+        </section>
+
+        <section class="panel schematic-panel">
+          <h2>Electrical schematic</h2>
+
+          <div class="diagram">
+            <div class="inline-bus">
+              <div class="bus-label">L1</div>
+              <div class="bus-label">L2</div>
+              <div class="bus-label">L3</div>
+            </div>
+
+            <div class="circuit-row">
+              <div class="device breaker">Breaker</div>
+              <div class="device contactor" id="lineContactor">Main Contactor</div>
+              <div class="device overload" id="overloadRelay">Thermal Relay</div>
+              <div class="device motor" id="motorBlock">Motor</div>
+            </div>
+
+            <div class="circuit-row second-row">
+              <div class="device contactor secondary" id="forwardContactor">Forward</div>
+              <div class="device contactor secondary" id="reverseContactor">Reverse</div>
+              <div class="device timer">Timer</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel stats-panel">
+          <h2>Operational values</h2>
+
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span>Current</span>
+              <strong id="currentValue">0.0 A</strong>
+            </div>
+            <div class="stat-box">
+              <span>Voltage</span>
+              <strong id="voltageValue">380 V</strong>
+            </div>
+            <div class="stat-box">
+              <span>Speed</span>
+              <strong id="rpmValue">0 RPM</strong>
+            </div>
+            <div class="stat-box">
+              <span>Temperature</span>
+              <strong id="tempValue">25°C</strong>
+            </div>
+          </div>
+
+          <div class="fault-panel">
+            <h3>Protection status</h3>
+            <ul>
+              <li>Fault: <strong id="faultValue">None</strong></li>
+              <li>Direction: <strong id="directionValue">Forward</strong></li>
+              <li>Soft starter: <strong id="softValue">0%</strong></li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

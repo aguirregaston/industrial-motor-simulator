@@ -1,0 +1,445 @@
+const state = {
+  power: 15,
+  voltage: 380,
+  load: 55,
+  mode: 'DOL',
+  status: 'STOPPED',
+  fault: 'None',
+  current: 0,
+  rpm: 0,
+  temp: 25,
+  softLevel: 0,
+  direction: 'Forward',
+  phaseLoss: false,
+  overload: false,
+  startRequested: false,
+  tripActive: false,
+};
+
+const els = {
+  powerInput: document.getElementById('powerInput'),
+  powerValue: document.getElementById('powerValue'),
+  loadInput: document.getElementById('loadInput'),
+  loadValue: document.getElementById('loadValue'),
+  voltageSelect: document.getElementById('voltageSelect'),
+  modeSelect: document.getElementById('modeSelect'),
+  currentValue: document.getElementById('currentValue'),
+  voltageValue: document.getElementById('voltageValue'),
+  rpmValue: document.getElementById('rpmValue'),
+  tempValue: document.getElementById('tempValue'),
+  faultValue: document.getElementById('faultValue'),
+  directionValue: document.getElementById('directionValue'),
+  softValue: document.getElementById('softValue'),
+  globalStatus: document.getElementById('globalStatus'),
+  lineContactor: document.getElementById('lineContactor'),
+  overloadRelay: document.getElementById('overloadRelay'),
+  motorBlock: document.getElementById('motorBlock'),
+  forwardContactor: document.getElementById('forwardContactor'),
+  reverseContactor: document.getElementById('reverseContactor'),
+  startButton: document.getElementById('startButton'),
+  stopButton: document.getElementById('stopButton'),
+  faultCurrentButton: document.getElementById('faultCurrentButton'),
+  faultPhaseButton: document.getElementById('faultPhaseButton'),
+  faultResetButton: document.getElementById('faultResetButton'),
+};
+
+function updateConfigInputs() {
+  state.power = Number(els.powerInput.value);
+  state.load = Number(els.loadInput.value);
+  state.voltage = Number(els.voltageSelect.value);
+  state.mode = els.modeSelect.value;
+  els.powerValue.textContent = state.power;
+  els.loadValue.textContent = state.load;
+  els.voltageValue.textContent = `${state.voltage} V`;
+}
+
+function setFault(faultName) {
+  state.fault = faultName;
+  els.faultValue.textContent = faultName;
+  state.tripActive = true;
+  state.status = 'TRIP';
+  state.startRequested = false;
+  updateStatusChip();
+  updateDeviceStates();
+}
+
+function resetFault() {
+  state.fault = 'None';
+  state.tripActive = false;
+  els.faultValue.textContent = 'None';
+  if (state.status !== 'RUNNING') {
+    state.status = 'STOPPED';
+  }
+  updateStatusChip();
+  updateDeviceStates();
+}
+
+function updateStatusChip() {
+  els.globalStatus.textContent = state.status;
+  if (state.status === 'RUNNING') {
+    els.globalStatus.style.background = 'rgba(45, 212, 191, 0.15)';
+    els.globalStatus.style.borderColor = 'rgba(45, 212, 191, 0.45)';
+    els.globalStatus.style.color = '#d6fff7';
+  } else if (state.status === 'TRIP') {
+    els.globalStatus.style.background = 'rgba(248, 113, 113, 0.12)';
+    els.globalStatus.style.borderColor = 'rgba(248, 113, 113, 0.48)';
+    els.globalStatus.style.color = '#ffd7d7';
+  } else {
+    els.globalStatus.style.background = 'rgba(255,255,255,0.04)';
+    els.globalStatus.style.borderColor = 'rgba(255,255,255,0.1)';
+    els.globalStatus.style.color = '#edf3ff';
+  }
+}
+
+function startMotor() {
+  if (state.tripActive) {
+    return;
+  }
+
+  state.startRequested = true;
+  state.status = 'STARTING';
+  updateStatusChip();
+  updateDeviceStates();
+}
+
+function stopMotor() {
+  state.startRequested = false;
+  state.status = 'STOPPED';
+  state.current = 0;
+  state.rpm = 0;
+  state.temp = 25;
+  state.softLevel = 0;
+  updateStatusChip();
+  updateDeviceStates();
+}
+
+function computeCurrent() {
+  const baseCurrent = (state.power * 746) / (state.voltage * 1.732 * 0.85);
+  const loadFactor = 1 + state.load / 100;
+  const modeFactor = state.mode === 'SOFT' ? 0.72 : state.mode === 'REVERSING' ? 0.9 : 1;
+  const phaseFactor = state.phaseLoss ? 0.4 : 1;
+  return Math.max(0, baseCurrent * loadFactor * modeFactor * phaseFactor);
+}
+
+function evaluateProtection(current) {
+  const overloadThreshold = 1.15 * (state.power * 5.5);
+
+  if (state.overload || current > overloadThreshold) {
+    setFault('Overcurrent');
+    return true;
+  }
+
+  if (state.phaseLoss) {
+    setFault('Phase loss');
+    return true;
+  }
+
+  return false;
+}
+
+function updateDeviceStates() {
+  const isRunning = state.status === 'RUNNING' || state.status === 'STARTING';
+  const isTrip = state.status === 'TRIP';
+
+  els.lineContactor.classList.toggle('active', isRunning && !isTrip);
+  els.lineContactor.classList.toggle('trip', isTrip);
+
+  els.overloadRelay.classList.toggle('active', isRunning && !isTrip);
+  els.overloadRelay.classList.toggle('trip', isTrip);
+
+  els.motorBlock.classList.toggle('active', isRunning && !isTrip);
+  els.motorBlock.classList.toggle('trip', isTrip);
+
+  els.forwardContactor.classList.toggle('active', isRunning && state.direction === 'Forward' && !isTrip);
+  els.forwardContactor.classList.toggle('trip', isTrip);
+
+  els.reverseContactor.classList.toggle('active', isRunning && state.direction === 'Reverse' && !isTrip);
+  els.reverseContactor.classList.toggle('trip', isTrip);
+}
+
+function tick() {
+  updateConfigInputs();
+
+  if (state.startRequested && !state.tripActive) {
+    const current = computeCurrent();
+    const softCap = state.mode === 'SOFT' ? 1 : 0.94;
+
+    if (state.status === 'STARTING') {
+      if (state.mode === 'SOFT') {
+        state.softLevel = Math.min(1, state.softLevel + 0.04);
+      } else {
+        state.softLevel = 1;
+      }
+
+      state.current = current * state.softLevel;
+      state.rpm = Math.min(1480, state.rpm + (230 * state.softLevel + 25));
+      state.temp = Math.min(120, state.temp + 0.7 + state.load / 120);
+
+      if (state.rpm >= 1450 || state.mode !== 'SOFT' && state.rpm >= 1450) {
+        state.status = 'RUNNING';
+      }
+
+      if (evaluateProtection(state.current)) {
+        return;
+      }
+    }
+
+    if (state.status === 'RUNNING') {
+      const runningCurrent = current * (0.45 + state.load / 220);
+      state.current = runningCurrent;
+      state.rpm = 1450;
+      state.temp = Math.min(110, state.temp + 0.15 + state.load / 250);
+
+      if (evaluateProtection(state.current)) {
+        return;
+      }
+    }
+  } else {
+    state.current = 0;
+    state.softLevel = 0;
+    if (state.status === 'RUNNING') {
+      state.status = 'STOPPED';
+    }
+  }
+
+  if (state.status === 'STOPPED' || state.status === 'TRIP') {
+    state.current = 0;
+    state.rpm = 0;
+    if (state.status !== 'TRIP') {
+      state.temp = 25;
+    }
+  }
+
+  if (state.mode === 'REVERSING' && state.status === 'RUNNING') {
+    state.direction = state.direction === 'Forward' ? 'Reverse' : 'Forward';
+  }
+
+  els.currentValue.textContent = `${state.current.toFixed(1)} A`;
+  els.rpmValue.textContent = `${Math.round(state.rpm)} RPM`;
+  els.tempValue.textContent = `${state.temp.toFixed(0)}°C`;
+  els.faultValue.textContent = state.fault;
+  els.directionValue.textContent = state.direction;
+  els.softValue.textContent = `${Math.round(state.softLevel * 100)}%`;
+
+  updateStatusChip();
+  updateDeviceStates();
+}
+
+els.powerInput.addEventListener('input', updateConfigInputs);
+els.loadInput.addEventListener('input', updateConfigInputs);
+els.voltageSelect.addEventListener('change', updateConfigInputs);
+els.modeSelect.addEventListener('change', updateConfigInputs);
+els.startButton.addEventListener('click', startMotor);
+els.stopButton.addEventListener('click', stopMotor);
+els.faultCurrentButton.addEventListener('click', () => {
+  state.overload = true;
+  setFault('Overcurrent');
+});
+els.faultPhaseButton.addEventListener('click', () => {
+  state.phaseLoss = true;
+  setFault('Phase loss');
+});
+els.faultResetButton.addEventListener('click', () => {
+  state.overload = false;
+  state.phaseLoss = false;
+  resetFault();
+});
+
+setInterval(tick, 180);
+updateConfigInputs();
+updateStatusChip();
+updateDeviceStates();
+
+window.addEventListener('beforeunload', () => {
+  clearInterval();
+});
+
+console.log('Motor simulator initialized');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
